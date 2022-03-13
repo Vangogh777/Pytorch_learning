@@ -1,0 +1,105 @@
+import torch
+import numpy as np
+import torch.nn as nn
+from torch.autograd import  Variable
+import torch.utils.data as  Data
+import  torchvision
+import matplotlib.pyplot as plt
+#this will show what is CNN and how to make true it
+#pooling to solve the question that save  these information conv lost
+
+
+if __name__ == '__main__':
+    EPOCH = 1
+    BATCH_SIZE = 50
+    LR = 0.001      #learning rate
+    #True ：not download need to download
+    #False:already have the dataset not need to download
+    DOWNLOAD_MNIST = True
+
+    train_data = torchvision.datasets.MNIST(
+        root = './mnist',
+        train = True,
+        transform = torchvision.transforms.ToTensor(), #（0，1）
+        download = DOWNLOAD_MNIST
+    )
+    # print(train_data.data.size())
+    # print(train_data.targets.size())
+    # plt.imshow(train_data.data[0].numpy(),cmap='gray')
+    # plt.title('%i'%train_data.targets[0])
+    # plt.show()
+
+    train_loader = Data.DataLoader(dataset=train_data,batch_size=BATCH_SIZE,shuffle=True,num_workers=2)
+    test_data = torchvision.datasets.MNIST(root='./mnist',train=False)
+    test_x = torch.unsqueeze(test_data.data,dim=1).type(torch.float32)[:2000]/255.
+    #torch.unsqueeze: 对数据维度进行扩充
+    #torch.squeeze: 对数据进行压缩
+    test_y = test_data.targets[:2000]
+
+    class CNN(nn.Module):
+        def __init__(self):
+            super(CNN, self).__init__()
+            self.conv1 = nn.Sequential(
+                nn.Conv2d(              #(1,28,28)
+                    in_channels=1,
+                    #输入通道个数
+                    out_channels=16,
+                    #输出通道个数
+                    #16个卷积核，用16个卷积核分别对图片进行卷积
+                    kernel_size=5,
+                    #filter = 5*5*16
+                    #5*5的区域扫描
+                    stride=1,
+                    #每隔多少步，跳一下
+                    padding = 2
+                    #if stride = 1 ,padding =(kernel_size -1)/2 = (5-1)/2
+
+                ),  #特征过滤 提取器
+                # -> (16,28,28)
+                nn.ReLU(),      #->(16,28,28)
+                nn.MaxPool2d(kernel_size = 2),         #筛选重要信息
+                #->(16,14,14)
+            )
+
+            self.conv2 = nn.Sequential( #->(16,14,14)
+                nn.Conv2d(16,32,5,1,2),#->(32,14,14)
+                nn.ReLU(),#->(32,14,14)
+                nn.MaxPool2d(2) #->(32,7,7)
+            )
+            self.out = nn.Linear(32 * 7 * 7,10)
+
+        def forward(self,x):
+            x = self.conv1(x)
+            x = self.conv2(x)           #(batch,32,7,7)
+            x = x.view(x.size(0),-1)    #(batch,32*7*7)
+            output = self.out(x)
+
+            return output
+
+    cnn =CNN()
+    #print(cnn)
+    optimiter = torch.optim.Adam(cnn.parameters(),lr=LR)
+    loss_func = nn.CrossEntropyLoss()
+
+    #train and testing
+    for epoch in range(EPOCH):
+        for step,(x,y) in enumerate(train_loader):
+            b_x = Variable(x)
+            b_y = Variable(y)
+
+            out_put = cnn(b_x)
+            loss = loss_func(out_put,b_y)
+            optimiter.zero_grad()
+            loss.backward()
+            optimiter.step()
+
+            if step %50 ==0:
+                test_output = cnn(test_x)
+                pred_y = torch.max(test_output,1)[1].data.squeeze()
+                accuracy = sum(pred_y == test_y) / test_y.size(0)
+                print('Epoch:',epoch,'| train loss:%.4f'%loss.item(),'|test accracy:%.4f'%accuracy)
+
+    test_output = cnn(test_x[:10])
+    pred_y = torch.max(test_output,1)[1].data.numpy().squeeze()
+    print(pred_y,'prediction number')
+    print(test_y[:10].numpy(),'real number')
